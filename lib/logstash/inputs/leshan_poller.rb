@@ -16,7 +16,7 @@ require "manticore"
 # [source,ruby]
 # ----------------------------------
 # input {
-#   http_poller {
+#   leshan_poller {
 #     urls => {
 #       test1 => "http://localhost:9200"
 #       test2 => {
@@ -157,8 +157,7 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
 
     client.async.send(method, *request_opts).
       on_success {|response| device_handle_success(queue, name, request, response, Time.now - started)}.
-      on_failure {|exception|
-      handle_failure(queue, name, request, exception, Time.now - started)
+      on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started)
     }
  
   end
@@ -169,34 +168,42 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
 
     @codec.decode(response.body) do |decoded|
       device = decoded.to_hash
-      #puts device['endpoint']
+      hash_devices = Hash[]
       # gets objects
       for object in device['objectLinks'] do
-	#puts " - " + object['url']
         *request_opts = request[1] + "/" + device["endpoint"] + object['url']
+        
+        device["objectId"] = object['objectId']
+	puts object['objectId']
         started_time = Time.now
 	client.async.send(method, *request_opts).
-          on_success {|response| handle_success(queue, name, request, response, Time.now - started_time)}.
-          on_failure {|exception|
-          handle_failure(queue, name, request, exception, Time.now - started)
+          on_success {|response| handle_success(queue, name, request, response, Time.now - started_time, device)}.
+          on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started_time)
         }
       end
+      
+      client.execute!
     end
 
   end
 
   private
-  def handle_success(queue, name, request, response, execution_time)
+  def handle_success(queue, name, request, response, execution_time, device_info)
     @codec.decode(response.body) do |decoded|
-      event = @target ? LogStash::Event.new(@target => decoded.to_hash) : decoded
-      handle_decoded_event(queue, name, request, response, event, execution_time)
+      event = @target ? LogStash::Event.new(@target => decoded.to_hash ) : decoded
+      handle_decoded_event(queue, name, request, response, event, execution_time, device_info)
     end
   end
 
   private
-  def handle_decoded_event(queue, name, request, response, event, execution_time)
+  def handle_decoded_event(queue, name, request, response, event, execution_time, device_info)
     apply_metadata(event, name, request, response, execution_time)
     decorate(event)
+    event['endpoint'] = device_info['endpoint']
+    event['registrationId'] = device_info['registrationId']
+    event['registrationDate'] = device_info['registrationDate']
+    event['address'] = device_info['address']
+    event['objectId'] = device_info['objectId']
     queue << event
   rescue StandardError, java.lang.Exception => e
     @logger.error? && @logger.error("Error eventifying response!",

@@ -2,7 +2,7 @@
 
 [![Build Status](http://build-eu-00.elastic.co/view/LS%20Other/job/logstash-plugin-input-http_poller-unit/badge/icon)](http://build-eu-00.elastic.co/view/LS%20Other/job/logstash-plugin-input-http_poller-unit/)
 
-This plugin is based off [logstash-input-http_poller](https://github.com/logstash-plugins/logstash-input-http_poller) by @maximede.
+This plugin is based off [logstash-input-http_poller](https://github.com/logstash-plugins/logstash-input-http_poller).
 
 This [Logstash](https://github.com/elastic/logstash) input plugin allows you to call an LESHAN HTTP API, decode the output of it into event(s), and send them on their merry way.
 
