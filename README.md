@@ -1,10 +1,10 @@
-# Logstash HTTP input plugin
+# Logstash LESHAN input plugin
 
 [![Build Status](http://build-eu-00.elastic.co/view/LS%20Other/job/logstash-plugin-input-http_poller-unit/badge/icon)](http://build-eu-00.elastic.co/view/LS%20Other/job/logstash-plugin-input-http_poller-unit/)
 
-This plugin is based off [logstash-input-rest](https://github.com/maximede/logstash-input-rest) by @maximede.
+This plugin is based off [logstash-input-http_poller](https://github.com/logstash-plugins/logstash-input-http_poller) by @maximede.
 
-This [Logstash](https://github.com/elastic/logstash) input plugin allows you to call an HTTP API, decode the output of it into event(s), and send them on their merry way.
+This [Logstash](https://github.com/elastic/logstash) input plugin allows you to call an LESHAN HTTP API, decode the output of it into event(s), and send them on their merry way.
 
 The idea behind this plugins came from a need to read springboot metrics endpoint, instead of configuring jmx to monitor my java application memory / gc/ etc.
 
@@ -12,7 +12,7 @@ It is fully free and fully open source. The license is Apache 2.0, meaning you a
 
 ## Config Example
 
-For config examples see `http_poller.rb` in `lib/logstash/inputs/` in this repo.
+For config examples see `leshan_poller.rb` in `lib/logstash/inputs/` in this repo.
 
 ## Documentation
 
