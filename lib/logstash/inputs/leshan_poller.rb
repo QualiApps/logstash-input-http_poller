@@ -57,10 +57,9 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   # hash of metadata.
   config :metadata_target, :validate => :string, :default => '@metadata'
 
-  @res_devices = Hash[]
-
   public
   def register
+    @res_devices = Hash[]
     @host = Socket.gethostname.force_encoding(Encoding::UTF_8)
 
     @logger.info("Registering leshan_poller Input", :type => @type,
@@ -144,7 +143,7 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
     started = Time.now
 
     method, *request_opts = request
-
+    
     client.async.send(method, *request_opts).
       on_success {|device_response| device_handle_success(queue, name, request, device_response, Time.now - started)}.
       on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started)
@@ -155,7 +154,6 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   private
   def device_handle_success(queue, name, request, device_response, execution_time)
     method, *r_opts = request
-    @res_devices = Hash[]
     @codec.decode(device_response.body) do |decoded|
       device = decoded.to_hash
       # gets objects
@@ -163,15 +161,15 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
         *r_opts = request[1] + "/" + device["endpoint"] + object['url']
         
         started_time = Time.now
-	
+
         r = client.async.send(method, *r_opts).
           on_success {|response| handle_success(queue, name, request, response, Time.now - started_time)}.
           on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started_time)
         }
-        
+
         @res_devices[r.context] = Hash["endpoint", device["endpoint"], "registrationId", device["registrationId"], "registrationDate", device["registrationDate"], "address", device["address"], "objectId", object['objectId'], "objectInstanceId", object["objectInstanceId"]]
+        puts @res_devices
       end
-      
       client.execute!
     end
 
@@ -190,6 +188,7 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
     apply_metadata(event, name, request, response, execution_time)
     decorate(event)
     event = update_event(event, response.context)
+    @res_devices.delete(response.context)
     queue << event
   rescue StandardError, java.lang.Exception => e
     @logger.error? && @logger.error("Error eventifying response!",
@@ -217,7 +216,9 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   private
   # Retrieves device info
   def get_device_info(identity, key)
-    return @res_devices[identity][key] if @res_devices[identity][key]
+    info = @res_devices[identity][key] if @res_devices[identity][key]
+  
+  return info
   end
 
   private
