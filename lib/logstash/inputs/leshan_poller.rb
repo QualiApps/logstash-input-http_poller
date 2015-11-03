@@ -18,25 +18,13 @@ require "manticore"
 # input {
 #   leshan_poller {
 #     urls => {
-#       test1 => "http://localhost:9200"
-#       test2 => {
-#         # Supports all options supported by ruby's Manticore HTTP client
-#         method => get
-#         url => "http://localhost:9200/_cluster/health"
-#         headers => {
-#           Accept => "application/json"
-#         }
-#         auth => {
-#           user => "AzureDiamond"
-#           password => "hunter2"
-#         }
-#       }
+#       test1 => "http://leshan:8080/api/clients"
 #     }
 #     request_timeout => 60
 #     interval => 60
 #     codec => "json"
 #     # A hash of request metadata info (timing, response headers, etc.) will be sent here
-#     metadata_target => "http_poller_metadata"
+#     metadata_target => "leshan_poller_metadata"
 #   }
 # }
 #
@@ -68,6 +56,8 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   # Set this value to the name of the field you'd like to store a nested
   # hash of metadata.
   config :metadata_target, :validate => :string, :default => '@metadata'
+
+  @res_devices = Hash[]
 
   public
   def register
@@ -156,30 +146,30 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
     method, *request_opts = request
 
     client.async.send(method, *request_opts).
-      on_success {|response| device_handle_success(queue, name, request, response, Time.now - started)}.
+      on_success {|device_response| device_handle_success(queue, name, request, device_response, Time.now - started)}.
       on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started)
     }
  
   end
 
   private
-  def device_handle_success(queue, name, request, response, execution_time)
-    method, *request_opts = request
-
-    @codec.decode(response.body) do |decoded|
+  def device_handle_success(queue, name, request, device_response, execution_time)
+    method, *r_opts = request
+    @res_devices = Hash[]
+    @codec.decode(device_response.body) do |decoded|
       device = decoded.to_hash
-      hash_devices = Hash[]
       # gets objects
       for object in device['objectLinks'] do
-        *request_opts = request[1] + "/" + device["endpoint"] + object['url']
+        *r_opts = request[1] + "/" + device["endpoint"] + object['url']
         
-        device["objectId"] = object['objectId']
-	puts object['objectId']
         started_time = Time.now
-	client.async.send(method, *request_opts).
-          on_success {|response| handle_success(queue, name, request, response, Time.now - started_time, device)}.
+	
+        r = client.async.send(method, *r_opts).
+          on_success {|response| handle_success(queue, name, request, response, Time.now - started_time)}.
           on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started_time)
         }
+        
+        @res_devices[r.context] = Hash["endpoint", device["endpoint"], "registrationId", device["registrationId"], "registrationDate", device["registrationDate"], "address", device["address"], "objectId", object['objectId'], "objectInstanceId", object["objectInstanceId"]]
       end
       
       client.execute!
@@ -188,22 +178,18 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   end
 
   private
-  def handle_success(queue, name, request, response, execution_time, device_info)
+  def handle_success(queue, name, request, response, execution_time)
     @codec.decode(response.body) do |decoded|
       event = @target ? LogStash::Event.new(@target => decoded.to_hash ) : decoded
-      handle_decoded_event(queue, name, request, response, event, execution_time, device_info)
+      handle_decoded_event(queue, name, request, response, event, execution_time)
     end
   end
 
   private
-  def handle_decoded_event(queue, name, request, response, event, execution_time, device_info)
+  def handle_decoded_event(queue, name, request, response, event, execution_time)
     apply_metadata(event, name, request, response, execution_time)
     decorate(event)
-    event['endpoint'] = device_info['endpoint']
-    event['registrationId'] = device_info['registrationId']
-    event['registrationDate'] = device_info['registrationDate']
-    event['address'] = device_info['address']
-    event['objectId'] = device_info['objectId']
+    event = update_event(event, response.context)
     queue << event
   rescue StandardError, java.lang.Exception => e
     @logger.error? && @logger.error("Error eventifying response!",
@@ -213,6 +199,25 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
                                     :url => request,
                                     :response => response
     )
+  end
+
+  private
+  # Update event
+  def update_event(event, identity)
+    event['endpoint'] = get_device_info(identity, 'endpoint')
+    event['registrationId'] = get_device_info(identity, 'registrationId')
+    event['registrationDate'] = get_device_info(identity, 'registrationDate')
+    event['address'] = get_device_info(identity, 'address')
+    event['objectId'] = get_device_info(identity, 'objectId')
+    event['objectInstanceId'] = get_device_info(identity, 'objectInstanceId')  
+
+  return event
+  end
+
+  private
+  # Retrieves device info
+  def get_device_info(identity, key)
+    return @res_devices[identity][key] if @res_devices[identity][key]
   end
 
   private
