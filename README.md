@@ -4,7 +4,7 @@
 
 This plugin is based off [logstash-input-http_poller](https://github.com/logstash-plugins/logstash-input-http_poller).
 
-This [Logstash](https://github.com/elastic/logstash) input plugin allows you to call an LESHAN HTTP API, decode the output of it into event(s), and send them on their merry way.
+This [Logstash](https://github.com/elastic/logstash) input plugin allows you to call an [LESHAN](https://github.com/eclipse/leshan) HTTP API, decode the output of it into event(s), and send them on their merry way.
 
 The idea behind this plugins came from a need to read springboot metrics endpoint, instead of configuring jmx to monitor my java application memory / gc/ etc.
 
