@@ -131,48 +131,47 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   private
   def run_once(queue)
     @requests.each do |name, request|
-      request_async(queue, name, request)
+      device_request(queue, name, request)
     end
-
-    client.execute!
   end
 
   private
-  def request_async(queue, name, request)
+  # Retrieves the list of devices
+  def device_request(queue, name, request)
     @logger.debug? && @logger.debug("Fetching URL", :name => name, :url => request)
     started = Time.now
-
-    method, *request_opts = request
     
-    client.async.send(method, *request_opts).
-      on_success {|device_response| device_handle_success(queue, name, request, device_response, Time.now - started)}.
-      on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started)
-    }
- 
+    client.get(request[1]) { |device_response| device_handle_success(queue, name, request, device_response, Time.now - started)}
   end
 
   private
+  # Retrieves all values of available objects
   def device_handle_success(queue, name, request, device_response, execution_time)
     method, *r_opts = request
     @codec.decode(device_response.body) do |decoded|
       device = decoded.to_hash
       # gets objects
       for object in device['objectLinks'] do
-        *r_opts = request[1] + "/" + device["endpoint"] + object['url']
-        
+        object_request_async(queue, name, method, *r_opts, request[1], device, object)
+      end
+
+      client.execute!
+    end
+  end
+
+  private
+  def object_request_async(queue, name, method, *r_opts, url, device, object)
+        *r_opts = url + "/" + device["endpoint"] + object['url']
+        obj_request = [method, r_opts[0]]
+
         started_time = Time.now
 
         r = client.async.send(method, *r_opts).
-          on_success {|response| handle_success(queue, name, request, response, Time.now - started_time)}.
+          on_success {|response| handle_success(queue, name, obj_request, response, Time.now - started_time)}.
           on_failure {|exception| handle_failure(queue, name, request, exception, Time.now - started_time)
         }
 
         @res_devices[r.context] = Hash["endpoint", device["endpoint"], "registrationId", device["registrationId"], "registrationDate", device["registrationDate"], "address", device["address"], "objectId", object['objectId'], "objectInstanceId", object["objectInstanceId"]]
-        puts @res_devices
-      end
-      client.execute!
-    end
-
   end
 
   private
@@ -216,9 +215,7 @@ class LogStash::Inputs::LESHAN_Poller < LogStash::Inputs::Base
   private
   # Retrieves device info
   def get_device_info(identity, key)
-    info = @res_devices[identity][key] if @res_devices[identity][key]
-  
-  return info
+    return @res_devices[identity][key] if @res_devices[identity][key]
   end
 
   private
